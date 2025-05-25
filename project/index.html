@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Peta Dan Laporan Lalulintas</title>
+
+  <!-- Fungsinya untuk menampilkan ikon favicon di tab browser -->
+  <link rel="icon" type="image/png" href="logo/logo tesla.jpg">
+
+  <!-- Fungsinya untuk menentukan pengkodean karakter menjadi UTF-8 -->
+  <meta charset="utf-8" />
+
+  <!-- Fungsinya agar tampilan halaman responsif di berbagai ukuran layar -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Fungsinya untuk menghubungkan file CSS dari pustaka Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+
+  <!-- Fungsinya untuk menghubungkan CSS dari Leaflet Routing Machine -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+
+  <!-- Fungsinya untuk menata tampilan halaman (CSS internal) -->
+  <style>
+    body, html { margin: 0; padding: 0; height: 100%; font-family: Arial, sans-serif; }
+    #map { height: 100vh; }
+
+    /* Fungsinya untuk menata form laporan */
+    .report-form {
+      position: absolute;
+      top: 30%;
+      left: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      width: 200px;
+    }
+
+    .report-form h3 { margin-top: 0; font-size: 10px; }
+
+    /* Fungsinya untuk menata input dan textarea */
+    input, textarea {
+      display: block;
+      width: calc(95% - 10px);
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 2px solid #000000;
+      border-radius: 5px;
+    }
+
+    /* Fungsinya untuk menata tombol */
+    button {
+      display: block;
+      width: 100%;
+      padding: 5px;
+      font-size: 14px;
+      font-weight: bold;
+      color: black;
+      background-color: rgb(218, 218, 136);
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    button:hover { opacity: 0.9; }
+
+    /* Fungsinya untuk menata tampilan kotak pencarian rute */
+    .controls {
+      position: absolute;
+      top: 15%;
+      left: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      width: 200px;
+    }
+
+    .controls input {
+      width: 91%;
+      padding: 7px;
+      border: 2px solid #000000;
+      border-radius: 5px;
+      margin-bottom: 5px;
+    }
+
+    /* Fungsinya untuk menata tampilan info cuaca */
+    .weather-info {
+      position: absolute;
+      top: 2%;
+      left: 50px;
+      z-index: 1000;
+      background: rgb(236, 236, 236);
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      font-size: 14px;
+    }
+
+    /* Fungsinya untuk mengatur tampilan watermark (logo di peta) */
+    .leaflet-control-watermark {
+      width: 100px;
+      opacity: 0.4;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Fungsinya untuk menampilkan peta -->
+<div id="map"></div>
+
+<!-- Fungsinya untuk menampilkan form laporan -->
+<div class="report-form">
+  <h3>Buat Laporan</h3>
+  <input type="text" id="title" placeholder="Judul laporan" required />
+  <textarea id="description" placeholder="Deskripsi kejadian"></textarea>
+  <input type="number" id="latitude" placeholder="Latitude" step="any" required />
+  <input type="number" id="longitude" placeholder="Longitude" step="any" required />
+  <button onclick="useCurrentLocation()">Gunakan Lokasi Saya</button>
+  <button onclick="submitReport()">Kirim Laporan</button>
+</div>
+
+<!-- Fungsinya untuk menampilkan kontrol pencarian rute -->
+<div class="controls">
+  <input type="text" id="toLocation" placeholder="Cari lokasi tujuan" />
+  <button onclick="searchRoute()">Cari Rute</button>
+</div>
+
+<!-- Fungsinya untuk menampilkan informasi cuaca tujuan -->
+<div class="weather-info" id="weatherInfo">Memuat cuaca </div>
+
+<!-- Fungsinya untuk menyertakan library Leaflet -->
+<script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+
+<!-- Fungsinya untuk menyertakan plugin routing Leaflet -->
+<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+
+<script>
+// Fungsinya untuk membuat peta dengan titik awal di Jakarta
+const map = L.map('map').setView([-6.1751, 106.8650], 5);
+
+// Fungsinya untuk menampilkan layer peta dari OpenStreetMap
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+
+// Fungsinya untuk menambahkan logo (watermark) di pojok peta
+var watermark = L.control({ position: 'bottomleft' });
+watermark.onAdd = function(map) {
+  var img = L.DomUtil.create('img', 'leaflet-control-watermark');
+  img.src = 'logo/logo tesla.jpg';
+  return img;
+};
+watermark.addTo(map);
+
+let currentPosition = null;
+let routeControl = null;
+
+// Fungsinya untuk mendeteksi lokasi pengguna saat ini
+navigator.geolocation.getCurrentPosition(pos => {
+  currentPosition = [pos.coords.latitude, pos.coords.longitude];
+  L.marker(currentPosition).addTo(map).bindPopup("Lokasi Anda").openPopup();
+}, err => {
+  alert("Gagal mendapatkan lokasi: " + err.message);
+});
+
+// Fungsinya untuk menerjemahkan deskripsi cuaca ke Bahasa Indonesia
+function translateWeather(desc) {
+  const translations = {
+    "clear sky": "Langit cerah",
+    "few clouds": "Sedikit berawan",
+    "scattered clouds": "Awan tersebar",
+    "broken clouds": "Awan terpecah",
+    "shower rain": "Hujan ringan",
+    "rain": "Hujan",
+    "thunderstorm": "Badai petir",
+    "snow": "Salju",
+    "mist": "Berkabut",
+    "overcast clouds": "Awan mendung"
+  };
+  return translations[desc] || desc;
+}
+
+// Fungsinya untuk mencari lokasi tujuan dan menampilkan rute + cuaca
+async function searchRoute() {
+  const toQuery = document.getElementById("toLocation").value;
+  if (!toQuery || !currentPosition) return alert("Masukkan tujuan dan izinkan lokasi Anda!");
+
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${toQuery}`);
+    const data = await res.json();
+    if (data.length === 0) throw new Error("Lokasi tidak ditemukan");
+
+    const toCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+
+    if (routeControl) map.removeControl(routeControl);
+
+    routeControl = L.Routing.control({
+      waypoints: [L.latLng(...currentPosition), L.latLng(...toCoords)],
+    }).addTo(map);
+
+    // Fungsinya untuk mengambil dan menampilkan data cuaca dari API backend
+    fetch(`http://localhost:3000/weather?lat=${toCoords[0]}&lon=${toCoords[1]}`)
+      .then(res => res.json())
+      .then(weather => {
+        const suhu = weather.main.temp;
+        const deskripsi = translateWeather(weather.weather[0].description);
+        document.getElementById("weatherInfo").innerHTML = `
+          <b>Cuaca Tujuan:</b><br>
+          ${deskripsi}<br>
+          Suhu: ${suhu}°C
+        `;
+      });
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// Fungsinya untuk memuat dan menampilkan laporan dari database
+async function loadReports() {
+  try {
+    const res = await fetch("http://localhost:3000/reports");
+    const reports = await res.json();
+
+    reports.forEach(report => {
+      if (report.latitude && report.longitude) {
+        L.marker([report.latitude, report.longitude])
+          .addTo(map)
+          .bindPopup(`<b>${report.title}</b><br>${report.description}`);
+      }
+    });
+  } catch (error) {
+    console.error("Gagal memuat laporan:", error);
+  }
+}
+
+// Fungsinya untuk mengisi input latitude dan longitude berdasarkan lokasi pengguna
+function useCurrentLocation() {
+  if (currentPosition) {
+    document.getElementById("latitude").value = currentPosition[0];
+    document.getElementById("longitude").value = currentPosition[1];
+  } else {
+    alert("Lokasi belum tersedia, izinkan akses lokasi di browser!");
+  }
+}
+
+// Fungsinya untuk mengirim laporan baru ke server (API)
+async function submitReport() {
+  const title = document.getElementById("title").value;
+  const description = document.getElementById("description").value;
+  const latitude = parseFloat(document.getElementById("latitude").value);
+  const longitude = parseFloat(document.getElementById("longitude").value);
+
+  if (!title || isNaN(latitude) || isNaN(longitude)) {
+    return alert("Harap isi semua bidang dengan benar!");
+  }
+
+  const report = { title, description, latitude, longitude };
+
+  try {
+    const res = await fetch("http://localhost:3000/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(report)
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      alert("Laporan berhasil dikirim!");
+      loadReports(); // Fungsinya untuk memperbarui daftar laporan setelah kirim
+    } else {
+      alert("Gagal mengirim laporan: " + data.error);
+    }
+  } catch (error) {
+    alert("Terjadi kesalahan saat mengirim laporan.");
+    console.error(error);
+  }
+}
+
+// Fungsinya untuk memuat laporan saat pertama kali halaman dibuka
+loadReports();
+</script>
+
+</body>
+</html>

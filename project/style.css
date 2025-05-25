@@ -1,0 +1,15 @@
+body {
+    margin: 0;
+    padding: 0;
+    background-color: transparent;
+}
+
+.watermark{
+    position: fixed;
+    bottom: 20px; /* Atur jarak dari bawah */
+    right: 20px; /* Atur jarak dari kanan */
+    width: 150px; /* Sesuaikan ukuran */
+    height: auto;
+    opacity: 0.1; /* Transparansi seperti watermark */
+    pointer-events: none; /* Agar tidak bisa diklik */
+}
